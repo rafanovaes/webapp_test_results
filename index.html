@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Result Comparator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 20px 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #0056b3;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        .section:last-child {
+            border-bottom: none;
+        }
+        input[type="file"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .test-group {
+            margin-bottom: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            padding: 15px;
+            background-color: #f9f9f9;
+        }
+        .test-group h3 {
+            margin-top: 0;
+            color: #333;
+            font-size: 1.1em;
+            border-bottom: 1px dashed #ddd;
+            padding-bottom: 8px;
+            margin-bottom: 15px;
+        }
+        .test-input-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            gap: 15px;
+        }
+        .test-input-group label {
+            flex: 3;
+            font-weight: bold;
+        }
+        .test-input-group input[type="text"] {
+            flex: 2;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .results-table th, .results-table td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        .results-table th {
+            background-color: #e9e9e9;
+            font-weight: bold;
+        }
+        .status-PASS {
+            color: green;
+            font-weight: bold;
+        }
+        .status-FAIL {
+            color: red;
+            font-weight: bold;
+        }
+        .status-INVALID-INPUT { /* Updated class name for consistency */
+            color: orange;
+            font-weight: bold;
+        }
+        .status-ERROR {
+            color: purple;
+            font-weight: bold;
+        }
+        #message {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #ffe0e0;
+            color: #d8000c;
+            border: 1px solid #d8000c;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Test Result Comparator</h1>
+
+        <div class="section">
+            <h2>1. Upload CSV File</h2>
+            <input type="file" id="csvFile" accept=".csv">
+            <button onclick="uploadCSV()">Upload CSV</button>
+            <div id="message" style="display: none;"></div>
+        </div>
+
+        <div class="section" id="testInputsSection" style="display: none;">
+            <h2>2. Enter Test Results</h2>
+            <div id="testInputs">
+                </div>
+            <button onclick="submitResults()">Compare Results</button>
+        </div>
+
+        <div class="section" id="resultsSection" style="display: none;">
+            <h2>3. Comparison Results</h2>
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th>Test Name</th>
+                        <th>Test Point Name</th>
+                        <th>Your Result</th>
+                        <th>Status</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsTableBody">
+                    </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const messageDiv = document.getElementById('message');
+
+        function showMessage(msg, type = 'error') {
+            messageDiv.textContent = msg;
+            messageDiv.style.display = 'block';
+            if (type === 'success') {
+                messageDiv.style.backgroundColor = '#d4edda';
+                messageDiv.style.borderColor = '#28a745';
+                messageDiv.style.color = '#155724';
+            } else { // error
+                messageDiv.style.backgroundColor = '#ffe0e0';
+                messageDiv.style.borderColor = '#d8000c';
+                messageDiv.style.color = '#d8000c';
+            }
+        }
+
+        async function uploadCSV() {
+            const fileInput = document.getElementById('csvFile');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                showMessage('Please select a CSV file to upload.', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/upload_csv', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage('CSV uploaded and processed successfully!', 'success');
+                    displayTestInputs(data.tests_grouped);
+                } else {
+                    showMessage('Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                console.error('Error uploading CSV:', error);
+                showMessage('An unexpected error occurred during CSV upload. Check console for details.', 'error');
+            }
+        }
+
+        function displayTestInputs(testsGrouped) {
+            const testInputsDiv = document.getElementById('testInputs');
+            testInputsDiv.innerHTML = ''; // Clear previous inputs
+            
+            let totalTestPoints = 0;
+            for (const testName in testsGrouped) {
+                totalTestPoints += testsGrouped[testName].length;
+            }
+
+            if (totalTestPoints === 0) {
+                testInputsDiv.innerHTML = '<p>No test points found in the CSV file.</p>';
+                document.getElementById('testInputsSection').style.display = 'block';
+                document.getElementById('resultsSection').style.display = 'none';
+                return;
+            }
+
+            for (const testName in testsGrouped) {
+                const testGroupDiv = document.createElement('div');
+                testGroupDiv.className = 'test-group';
+                testInputsDiv.appendChild(testGroupDiv);
+
+                const groupTitle = document.createElement('h3');
+                groupTitle.textContent = testName;
+                testGroupDiv.appendChild(groupTitle);
+
+                testsGrouped[testName].forEach(testPoint => {
+                    const div = document.createElement('div');
+                    div.className = 'test-input-group';
+
+                    const label = document.createElement('label');
+                    // Use Test Point Name directly for input ID and label
+                    label.textContent = testPoint['Test Point Name'] + (testPoint['Units'] ? ` (${testPoint['Units']})` : '');
+                    label.setAttribute('for', `input-${testPoint['Test Point Name'].replace(/\s/g, '-')}`); 
+
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    // Use Test Point Name as the name attribute for submission
+                    input.id = `input-${testPoint['Test Point Name'].replace(/\s/g, '-')}`;
+                    input.name = testPoint['Test Point Name']; 
+                    input.placeholder = `Enter result`;
+
+                    div.appendChild(label);
+                    div.appendChild(input);
+                    testGroupDiv.appendChild(div);
+                });
+            }
+
+            document.getElementById('testInputsSection').style.display = 'block';
+            document.getElementById('resultsSection').style.display = 'none'; // Hide results section until submitted
+        }
+
+        async function submitResults() {
+            const testInputsDiv = document.getElementById('testInputs');
+            const inputs = testInputsDiv.querySelectorAll('input[type="text"]');
+            const userResults = {};
+
+            inputs.forEach(input => {
+                // Key results by Test Point Name
+                userResults[input.name] = input.value;
+            });
+
+            try {
+                const response = await fetch('/submit_results', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ results: userResults })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    displayResults(data.results);
+                } else {
+                    showMessage('Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                console.error('Error submitting results:', error);
+                showMessage('An unexpected error occurred during result submission. Check console for details.', 'error');
+            }
+        }
+
+        function displayResults(results) {
+            const resultsTableBody = document.getElementById('resultsTableBody');
+            resultsTableBody.innerHTML = ''; // Clear previous results
+
+            if (results.length === 0) {
+                resultsTableBody.innerHTML = '<tr><td colspan="5">No results to display.</td></tr>';
+                document.getElementById('resultsSection').style.display = 'block';
+                return;
+            }
+
+            results.forEach(result => {
+                const row = resultsTableBody.insertRow();
+
+                const nameCell = row.insertCell();
+                nameCell.textContent = result['Test Name'];
+
+                const testPointNameCell = row.insertCell();
+                testPointNameCell.textContent = result['Test Point Name'];
+
+                const userResultCell = row.insertCell();
+                userResultCell.textContent = result['User Result'];
+
+                const statusCell = row.insertCell();
+                statusCell.textContent = result['Status'];
+                // Clean up status string for CSS class (e.g., "INVALID INPUT" becomes "status-INVALID-INPUT")
+                statusCell.className = `status-${result['Status'].replace(/\s/g, '-')}`; 
+
+                const messageCell = row.insertCell();
+                messageCell.textContent = result['Message'];
+            });
+
+            document.getElementById('resultsSection').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
